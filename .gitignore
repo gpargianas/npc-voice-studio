@@ -4,6 +4,7 @@ __pycache__/
 .numba_cache/
 
 generated_audio/
+voice_profiles/
 
 .env
 .venv/
