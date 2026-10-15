@@ -18,6 +18,42 @@ VOICE_LIBRARY = "Voice Library"
 UNSPECIFIED = "Any / unspecified"
 NORMAL_UNSPECIFIED = "Normal / unspecified"
 
+DIALOGUE_HELP = """
+**Expression and non-verbal cues**
+
+Insert a supported tag directly into the dialogue:
+
+```text
+[laughter] You really thought that would work?
+[sigh] Fine. I'll help you.
+[question-en] Where have you been?
+```
+
+**All supported tags**
+
+`[laughter]`, `[sigh]`, `[confirmation-en]`, `[question-en]`,
+`[question-ah]`, `[question-oh]`, `[question-ei]`, `[question-yi]`,
+`[surprise-ah]`, `[surprise-oh]`, `[surprise-wa]`, `[surprise-yo]`,
+`[dissatisfaction-hnn]`
+
+**Pronunciation**
+
+Override an English pronunciation by placing its **CMU/ARPAbet phonemes** in
+square brackets. The contents must use CMU/ARPAbet notation, not an arbitrary
+phonetic spelling.
+
+```text
+He plays the [B EY1 S] guitar while catching a [B AE1 S] fish.
+```
+
+This is useful for fantasy names, character names, place names, and unusual
+terminology.
+
+**Pacing**
+
+Use normal punctuation naturally to shape sentence structure and pacing.
+"""
+
 # Values mirror OmniVoice's supported English voice-design attributes exactly.
 VOICE_DESIGN_VALUES = {
     "gender": {
@@ -81,6 +117,12 @@ def load_text_file(file_path: str | None) -> str:
         raise gr.Error("The text file must be encoded as UTF-8.") from exc
     except OSError as exc:
         raise gr.Error("Could not read the text file.") from exc
+
+
+def render_dialogue_help() -> None:
+    """Render the shared, secondary help for OmniVoice inline controls."""
+    with gr.Accordion("Dialogue controls & pronunciation", open=False):
+        gr.Markdown(DIALOGUE_HELP)
 
 
 def build_voice_design_instruct(
@@ -572,6 +614,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         placeholder="Text to generate",
         lines=5,
     )
+    render_dialogue_help()
     dialogue_file = gr.File(
         label="Import Dialogue (.txt)",
         file_types=[".txt"],
