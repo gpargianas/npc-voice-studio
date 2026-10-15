@@ -1,6 +1,7 @@
 # NPC Voice Studio
 
-Minimal local zero-shot voice cloning app using the already installed OmniVoice package.
+Minimal local zero-shot voice cloning and voice design app using the already
+installed OmniVoice package.
 
 ## Requirements
 
@@ -13,7 +14,7 @@ No package installation is required for this project.
 
 ## Files
 
-- `src/omnivoice_service.py` loads OmniVoice once and exposes `OmniVoiceService.generate(...)`.
+- `src/omnivoice_service.py` loads OmniVoice once for cloning and voice design.
 - `src/f5_service.py` remains available temporarily as a rollback path.
 - `scripts/test_generation.py` runs one OmniVoice smoke test and saves `generated_audio/test_output.wav`.
 - `app.py` provides a minimal local Gradio interface.
@@ -27,8 +28,8 @@ From the project root:
 C:\Users\Example\miniconda3\envs\npc-voice\python.exe app.py
 ```
 
-Open the local URL printed by Gradio, then upload a reference clip and enter its
-exact transcript before generating new dialogue.
+Open the local URL printed by Gradio, then create from a reference sample,
+design a voice from supported speaker attributes, or reuse a voice from the library.
 
 ## Run The Smoke Test
 

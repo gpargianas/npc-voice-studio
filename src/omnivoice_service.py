@@ -6,7 +6,7 @@ from omnivoice import OmniVoice
 
 
 class OmniVoiceService:
-    """Load OmniVoice once and expose the app's voice-cloning operation."""
+    """Load OmniVoice once for voice cloning and voice design."""
 
     MODEL_ID = "k2-fsa/OmniVoice"
 
@@ -50,6 +50,33 @@ class OmniVoiceService:
             text=generation_text.strip(),
             ref_audio=str(reference_path),
             ref_text=ref_text.strip(),
+        )
+        if not audio:
+            raise RuntimeError("OmniVoice did not return generated audio.")
+
+        sf.write(str(output_file), audio[0], self.sample_rate)
+        return str(output_file)
+
+    def generate_designed_voice(
+        self,
+        generation_text: str,
+        instruct: str,
+        output_path: str | Path,
+    ) -> str:
+        """Generate a voice from supported OmniVoice speaker attributes."""
+        if not generation_text or not generation_text.strip():
+            raise ValueError("Generation text is required.")
+        if not instruct or not instruct.strip():
+            raise ValueError("At least one voice design attribute is required.")
+        if not output_path:
+            raise ValueError("Output path is required.")
+
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        audio = self._model.generate(
+            text=generation_text.strip(),
+            instruct=instruct.strip(),
         )
         if not audio:
             raise RuntimeError("OmniVoice did not return generated audio.")

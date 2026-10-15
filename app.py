@@ -12,7 +12,52 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = PROJECT_ROOT / "generated_audio"
 PROFILES_DIR = PROJECT_ROOT / "voice_profiles"
 CREATE_FROM_SAMPLE = "Create from Sample"
+DESIGN_VOICE = "Design Voice"
 VOICE_LIBRARY = "Voice Library"
+UNSPECIFIED = "Any / unspecified"
+NORMAL_UNSPECIFIED = "Normal / unspecified"
+
+# Values mirror OmniVoice's supported English voice-design attributes exactly.
+VOICE_DESIGN_VALUES = {
+    "gender": {
+        UNSPECIFIED: "",
+        "Male": "male",
+        "Female": "female",
+    },
+    "age": {
+        UNSPECIFIED: "",
+        "Child": "child",
+        "Teenager": "teenager",
+        "Young adult": "young adult",
+        "Middle-aged": "middle-aged",
+        "Elderly": "elderly",
+    },
+    "pitch": {
+        UNSPECIFIED: "",
+        "Very low": "very low pitch",
+        "Low": "low pitch",
+        "Moderate": "moderate pitch",
+        "High": "high pitch",
+        "Very high": "very high pitch",
+    },
+    "style": {
+        NORMAL_UNSPECIFIED: "",
+        "Whisper": "whisper",
+    },
+    "accent": {
+        UNSPECIFIED: "",
+        "American": "american accent",
+        "British": "british accent",
+        "Australian": "australian accent",
+        "Canadian": "canadian accent",
+        "Indian": "indian accent",
+        "Chinese": "chinese accent",
+        "Korean": "korean accent",
+        "Japanese": "japanese accent",
+        "Portuguese": "portuguese accent",
+        "Russian": "russian accent",
+    },
+}
 
 # Keep one model instance alive for every generation request.
 voice_service = OmniVoiceService()
@@ -35,6 +80,33 @@ def load_text_file(file_path: str | None) -> str:
         raise gr.Error("The text file must be encoded as UTF-8.") from exc
     except OSError as exc:
         raise gr.Error("Could not read the text file.") from exc
+
+
+def build_voice_design_instruct(
+    gender: str | None,
+    age: str | None,
+    pitch: str | None,
+    style: str | None,
+    accent: str | None,
+) -> str:
+    """Convert constrained UI selections to OmniVoice's instruct format."""
+    selections = {
+        "gender": gender,
+        "age": age,
+        "pitch": pitch,
+        "style": style,
+        "accent": accent,
+    }
+    parts: list[str] = []
+    for category, selection in selections.items():
+        if selection is None:
+            continue
+        values = VOICE_DESIGN_VALUES[category]
+        if selection not in values:
+            raise gr.Error(f"Invalid voice design {category} selection.")
+        if values[selection]:
+            parts.append(values[selection])
+    return ", ".join(parts)
 
 
 def _voice_error_message(error: VoiceProfileError) -> str:
@@ -72,20 +144,24 @@ def switch_voice_source(
     dict,
     dict,
     dict,
+    dict,
     None,
     dict,
     dict,
 ]:
     """Switch top-level workflows and close transient panels."""
-    if voice_source not in {CREATE_FROM_SAMPLE, VOICE_LIBRARY}:
+    if voice_source not in {CREATE_FROM_SAMPLE, DESIGN_VOICE, VOICE_LIBRARY}:
         raise gr.Error("Invalid voice source.")
 
     sample_mode = voice_source == CREATE_FROM_SAMPLE
+    design_mode = voice_source == DESIGN_VOICE
+    library_mode = voice_source == VOICE_LIBRARY
     return (
         gr.update(visible=sample_mode),
-        gr.update(visible=not sample_mode),
+        gr.update(visible=design_mode),
+        gr.update(visible=library_mode),
         gr.update(label="3. Dialogue" if sample_mode else "Dialogue"),
-        gr.update(label="Generated Audio" if sample_mode else "Output Audio"),
+        gr.update(label="Output Audio" if library_mode else "Generated Audio"),
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(value="", visible=False),
@@ -193,52 +269,86 @@ def generate_voice(
     ref_audio_path: str | None,
     ref_transcript: str,
     dialogue: str,
+    design_gender: str | None = None,
+    design_age: str | None = None,
+    design_pitch: str | None = None,
+    design_style: str | None = None,
+    design_accent: str | None = None,
 ) -> tuple[str, dict, dict[str, str] | None, dict, dict, dict]:
     """Resolve the selected source and generate one WAV file."""
-    sample_generation: dict[str, str] | None = None
-
-    if voice_source == VOICE_LIBRARY:
-        if not selected_voice:
-            raise gr.Error("Select a voice from My Voices before generating.")
-        try:
-            profile = profile_manager.get_profile(selected_voice)
-        except VoiceProfileError as exc:
-            raise gr.Error(_voice_error_message(exc)) from exc
-        ref_audio_path = str(profile.reference_audio_path)
-        ref_transcript = profile.transcript
-    elif voice_source != CREATE_FROM_SAMPLE:
-        raise gr.Error("Invalid voice source.")
-
-    if not ref_audio_path:
-        raise gr.Error("Reference audio is required.")
-    if not ref_transcript or not ref_transcript.strip():
-        raise gr.Error("Transcript is required.")
-    if not dialogue or not dialogue.strip():
-        raise gr.Error("Dialogue is required.")
-
-    ref_transcript = ref_transcript.strip()
-
+    reusable_voice_source: dict[str, str] | None = None
     output_path = OUTPUT_DIR / f"generation_{uuid4().hex}.wav"
-    generated_path = voice_service.generate(
-        ref_audio_path=ref_audio_path,
-        ref_text=ref_transcript,
-        generation_text=dialogue,
-        output_path=output_path,
-    )
 
-    if voice_source == CREATE_FROM_SAMPLE:
-        # Keep the exact source used for inference; never save generated audio.
-        sample_generation = {
-            "voice_source": CREATE_FROM_SAMPLE,
-            "ref_audio_path": str(ref_audio_path),
-            "ref_transcript": ref_transcript,
+    if voice_source == DESIGN_VOICE:
+        if not dialogue or not dialogue.strip():
+            raise gr.Error("Dialogue is required.")
+
+        instruct = build_voice_design_instruct(
+            design_gender,
+            design_age,
+            design_pitch,
+            design_style,
+            design_accent,
+        )
+        if not instruct:
+            raise gr.Error(
+                "Select at least one Voice Design attribute before generating."
+            )
+
+        dialogue = dialogue.strip()
+        generated_path = voice_service.generate_designed_voice(
+            generation_text=dialogue,
+            instruct=instruct,
+            output_path=output_path,
+        )
+        # A design instruction does not guarantee the same speaker on a later
+        # run, so reuse the successful output as a normal cloning reference.
+        reusable_voice_source = {
+            "voice_source": DESIGN_VOICE,
+            "ref_audio_path": generated_path,
+            "ref_transcript": dialogue,
         }
+    else:
+        if voice_source == VOICE_LIBRARY:
+            if not selected_voice:
+                raise gr.Error("Select a voice from My Voices before generating.")
+            try:
+                profile = profile_manager.get_profile(selected_voice)
+            except VoiceProfileError as exc:
+                raise gr.Error(_voice_error_message(exc)) from exc
+            ref_audio_path = str(profile.reference_audio_path)
+            ref_transcript = profile.transcript
+        elif voice_source != CREATE_FROM_SAMPLE:
+            raise gr.Error("Invalid voice source.")
+
+        if not ref_audio_path:
+            raise gr.Error("Reference audio is required.")
+        if not ref_transcript or not ref_transcript.strip():
+            raise gr.Error("Transcript is required.")
+        if not dialogue or not dialogue.strip():
+            raise gr.Error("Dialogue is required.")
+
+        ref_transcript = ref_transcript.strip()
+        generated_path = voice_service.generate(
+            ref_audio_path=ref_audio_path,
+            ref_text=ref_transcript,
+            generation_text=dialogue,
+            output_path=output_path,
+        )
+
+        if voice_source == CREATE_FROM_SAMPLE:
+            # Keep the original sample source; never save cloned output here.
+            reusable_voice_source = {
+                "voice_source": CREATE_FROM_SAMPLE,
+                "ref_audio_path": str(ref_audio_path),
+                "ref_transcript": ref_transcript,
+            }
 
     return (
         generated_path,
         gr.update(value=generated_path, visible=True),
-        sample_generation,
-        gr.update(visible=sample_generation is not None),
+        reusable_voice_source,
+        gr.update(visible=reusable_voice_source is not None),
         gr.update(visible=False),
         gr.update(value="", visible=False),
     )
@@ -258,7 +368,7 @@ def cancel_save_voice() -> tuple[dict, str]:
 
 def save_generated_voice(
     voice_name: str,
-    sample_generation: dict[str, str] | None,
+    reusable_voice_source: dict[str, str] | None,
 ) -> tuple[
     dict,
     dict,
@@ -275,14 +385,17 @@ def save_generated_voice(
     dict,
     dict,
 ]:
-    """Save the source from the last successful sample-based generation."""
+    """Save the reusable source from the last successful creation."""
     if not voice_name or not voice_name.strip():
         raise gr.Error("Voice name is required.")
-    if not sample_generation or sample_generation.get("voice_source") != CREATE_FROM_SAMPLE:
-        raise gr.Error("Generate from a sample before saving a voice.")
+    if not reusable_voice_source or reusable_voice_source.get("voice_source") not in {
+        CREATE_FROM_SAMPLE,
+        DESIGN_VOICE,
+    }:
+        raise gr.Error("Generate a voice before saving it for reuse.")
 
-    ref_audio_path = sample_generation.get("ref_audio_path")
-    ref_transcript = sample_generation.get("ref_transcript")
+    ref_audio_path = reusable_voice_source.get("ref_audio_path")
+    ref_transcript = reusable_voice_source.get("ref_transcript")
     if not ref_audio_path or not ref_transcript:
         raise gr.Error("The generated voice source is no longer available.")
 
@@ -323,7 +436,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
     gr.Markdown("# NPC Voice Studio")
 
     voice_source = gr.Radio(
-        choices=[CREATE_FROM_SAMPLE, VOICE_LIBRARY],
+        choices=[CREATE_FROM_SAMPLE, DESIGN_VOICE, VOICE_LIBRARY],
         value=CREATE_FROM_SAMPLE,
         label="Voice Source",
     )
@@ -344,6 +457,36 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             file_types=[".txt"],
             type="filepath",
         )
+
+    with gr.Column(visible=False) as design_voice_panel:
+        gr.Markdown("## Design Voice")
+        with gr.Row():
+            design_gender = gr.Dropdown(
+                choices=list(VOICE_DESIGN_VALUES["gender"]),
+                value=UNSPECIFIED,
+                label="Gender",
+            )
+            design_age = gr.Dropdown(
+                choices=list(VOICE_DESIGN_VALUES["age"]),
+                value=UNSPECIFIED,
+                label="Age",
+            )
+            design_pitch = gr.Dropdown(
+                choices=list(VOICE_DESIGN_VALUES["pitch"]),
+                value=UNSPECIFIED,
+                label="Pitch",
+            )
+        with gr.Row():
+            design_style = gr.Dropdown(
+                choices=list(VOICE_DESIGN_VALUES["style"]),
+                value=NORMAL_UNSPECIFIED,
+                label="Style",
+            )
+            design_accent = gr.Dropdown(
+                choices=list(VOICE_DESIGN_VALUES["accent"]),
+                value=UNSPECIFIED,
+                label="English Accent",
+            )
 
     with gr.Column(visible=False) as voice_library_panel:
         gr.Markdown("## My Voices")
@@ -426,8 +569,8 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             )
     save_voice_confirmation = gr.Markdown(visible=False)
 
-    # Stores only the sample source used by the last successful generation.
-    sample_generation_state = gr.State(value=None)
+    # Stores the exact cloning source created by the last successful generation.
+    reusable_voice_state = gr.State(value=None)
 
     reference_transcript_file.upload(
         fn=load_text_file,
@@ -445,13 +588,14 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         inputs=voice_source,
         outputs=[
             create_from_sample_panel,
+            design_voice_panel,
             voice_library_panel,
             dialogue,
             output_audio,
             save_voice_for_reuse_button,
             save_voice_panel,
             save_voice_confirmation,
-            sample_generation_state,
+            reusable_voice_state,
             delete_voice_panel,
             library_action_message,
         ],
@@ -462,7 +606,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             save_voice_for_reuse_button,
             save_voice_panel,
             save_voice_confirmation,
-            sample_generation_state,
+            reusable_voice_state,
         ],
     )
     reference_transcript.change(
@@ -471,7 +615,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             save_voice_for_reuse_button,
             save_voice_panel,
             save_voice_confirmation,
-            sample_generation_state,
+            reusable_voice_state,
         ],
     )
 
@@ -525,11 +669,16 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             reference_audio,
             reference_transcript,
             dialogue,
+            design_gender,
+            design_age,
+            design_pitch,
+            design_style,
+            design_accent,
         ],
         outputs=[
             output_audio,
             download_generated_audio,
-            sample_generation_state,
+            reusable_voice_state,
             save_voice_for_reuse_button,
             save_voice_panel,
             save_voice_confirmation,
@@ -545,7 +694,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
     )
     confirm_save_voice_button.click(
         fn=save_generated_voice,
-        inputs=[voice_name, sample_generation_state],
+        inputs=[voice_name, reusable_voice_state],
         outputs=[
             user_voice_selector,
             no_user_voices,
@@ -553,7 +702,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             save_voice_panel,
             save_voice_for_reuse_button,
             save_voice_confirmation,
-            sample_generation_state,
+            reusable_voice_state,
             selected_voice_heading,
             selected_voice_panel,
             library_reference_audio,
