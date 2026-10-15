@@ -4,7 +4,7 @@ from uuid import uuid4
 import gradio as gr
 import soundfile as sf
 
-from src.f5_service import F5VoiceService
+from src.omnivoice_service import OmniVoiceService
 from src.voice_profiles import VoiceProfileError, VoiceProfileManager
 
 
@@ -15,7 +15,7 @@ CREATE_FROM_SAMPLE = "Create from Sample"
 VOICE_LIBRARY = "Voice Library"
 
 # Keep one model instance alive for every generation request.
-voice_service = F5VoiceService()
+voice_service = OmniVoiceService()
 profile_manager = VoiceProfileManager(PROFILES_DIR)
 
 
@@ -35,26 +35,6 @@ def load_text_file(file_path: str | None) -> str:
         raise gr.Error("The text file must be encoded as UTF-8.") from exc
     except OSError as exc:
         raise gr.Error("Could not read the text file.") from exc
-
-
-def validate_reference_duration(ref_audio_path: str) -> None:
-    """Reject references that F5-TTS could shorten without matching text."""
-    try:
-        # Read duration metadata only; F5-TTS handles all audio preprocessing.
-        duration_seconds = sf.info(ref_audio_path).duration
-    except (RuntimeError, OSError, TypeError, ValueError) as exc:
-        raise gr.Error("Could not read the reference audio file.") from exc
-
-    # Reject long clips because F5-TTS may shorten the audio but leave a manual
-    # transcript untouched, creating a mismatch that can corrupt generation.
-    if duration_seconds > 12:
-        raise gr.Error(
-            "Reference audio is longer than 12 seconds. F5-TTS may shorten "
-            "long reference audio without shortening a manually supplied "
-            "transcript, causing the audio and transcript to become mismatched. "
-            "Please provide a reference clip of 12 seconds or less with a "
-            "matching transcript."
-        )
 
 
 def _voice_error_message(error: VoiceProfileError) -> str:
@@ -236,7 +216,6 @@ def generate_voice(
     if not dialogue or not dialogue.strip():
         raise gr.Error("Dialogue is required.")
 
-    validate_reference_duration(ref_audio_path)
     ref_transcript = ref_transcript.strip()
 
     output_path = OUTPUT_DIR / f"generation_{uuid4().hex}.wav"
@@ -307,7 +286,6 @@ def save_generated_voice(
     if not ref_audio_path or not ref_transcript:
         raise gr.Error("The generated voice source is no longer available.")
 
-    validate_reference_duration(ref_audio_path)
     try:
         profile = profile_manager.create_profile(
             voice_name,

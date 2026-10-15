@@ -6,15 +6,15 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.f5_service import F5VoiceService
+from src.omnivoice_service import OmniVoiceService
 
 
 def main() -> None:
-    service = F5VoiceService()
+    service = OmniVoiceService()
 
     ref_audio_path = files("f5_tts").joinpath("infer/examples/basic/basic_ref_en.wav")
     ref_text = "Some call me nature, others call me mother nature."
-    generation_text = "This is a short local zero shot voice cloning test."
+    generation_text = "This is a short local OmniVoice cloning test."
     output_path = PROJECT_ROOT / "generated_audio" / "test_output.wav"
 
     generated_path = service.generate(

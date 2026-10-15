@@ -61,7 +61,7 @@ class VoiceProfileManager:
 
         try:
             profile_directory.mkdir()
-            # Preserve the uploaded audio bytes; F5-TTS handles preprocessing later.
+            # Preserve the uploaded bytes; the inference service preprocesses later.
             shutil.copy2(source_audio, reference_audio)
             transcript_path.write_text(transcript, encoding="utf-8")
         except FileExistsError as exc:

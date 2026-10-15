@@ -77,6 +77,7 @@ networkx==3.6.1
 numba==0.66.0
 numpy @ file:///C:/Users/task_178034591057081/croot/numpy_and_numpy_base_1780346079163/work/dist/numpy-2.4.6-cp311-cp311-win_amd64.whl#sha256=9501c2a46e9ccccb98ecbd21aa6a17a625993614e227c6e4cca63c4166c16876
 omegaconf==2.3.1
+omnivoice==0.2.1
 orjson==3.11.9
 packaging==26.0
 pandas==3.0.5

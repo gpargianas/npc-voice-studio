@@ -1,20 +1,23 @@
 # NPC Voice Studio
 
-Minimal local zero-shot voice cloning wrapper using the already installed F5-TTS package.
+Minimal local zero-shot voice cloning app using the already installed OmniVoice package.
 
 ## Requirements
 
 - Existing Conda environment: `npc-voice`
-- Installed F5-TTS package inside that environment
+- Installed OmniVoice package and model cache inside that environment
+- CUDA-capable GPU recommended; CPU is used when CUDA is unavailable
 - A local reference audio file and matching transcript
 
 No package installation is required for this project.
 
 ## Files
 
-- `src/f5_service.py` loads F5-TTS once and exposes `F5VoiceService.generate(...)`.
-- `scripts/test_generation.py` runs one local smoke test and saves `generated_audio/test_output.wav`.
+- `src/omnivoice_service.py` loads OmniVoice once and exposes `OmniVoiceService.generate(...)`.
+- `src/f5_service.py` remains available temporarily as a rollback path.
+- `scripts/test_generation.py` runs one OmniVoice smoke test and saves `generated_audio/test_output.wav`.
 - `app.py` provides a minimal local Gradio interface.
+- `src/voice_profiles.py` stores reusable reference audio and matching transcripts.
 
 ## Run The UI
 
@@ -35,7 +38,9 @@ From the project root:
 C:\Users\Example\miniconda3\envs\npc-voice\python.exe scripts\test_generation.py
 ```
 
-The script uses F5-TTS's bundled local example reference audio. To use your own voice reference, edit `scripts/test_generation.py`:
+The smoke test uses F5-TTS's bundled example WAV only as a convenient local
+audio fixture while the rollback package remains installed. Inference is performed
+by `OmniVoiceService`. To use your own reference, edit `scripts/test_generation.py`:
 
 ```python
 ref_audio_path = "path/to/your/reference.wav"
