@@ -17,6 +17,7 @@ from src.omnivoice_service import (
     BatchVoiceContext,
     OmniVoiceService,
 )
+from src.reference_audio import ReferenceAudioError, assess_reference_audio
 from src.voice_profiles import VoiceProfileError, VoiceProfileManager
 
 
@@ -150,6 +151,28 @@ def render_dialogue_help() -> None:
     """Render the shared, secondary help for OmniVoice inline controls."""
     with gr.Accordion("Dialogue controls & pronunciation", open=False):
         gr.Markdown(DIALOGUE_HELP)
+
+
+def show_reference_audio_guidance(audio_path: str | None) -> dict:
+    """Show measured OmniVoice guidance whenever a sample is uploaded."""
+    if not audio_path:
+        return gr.update(value="", visible=False)
+
+    try:
+        assessment = assess_reference_audio(audio_path)
+    except ReferenceAudioError as exc:
+        message = str(exc)
+        gr.Warning(message)
+        return gr.update(value=f"**{message}**", visible=True)
+
+    if assessment.level in {"warning", "error"}:
+        gr.Warning(assessment.message)
+    message = (
+        f"**{assessment.message}**"
+        if assessment.blocked
+        else assessment.message
+    )
+    return gr.update(value=message, visible=True)
 
 
 def build_voice_design_instruct(
@@ -771,6 +794,16 @@ def generate_voice(
         if not dialogue or not dialogue.strip():
             raise gr.Error("Dialogue is required.")
 
+        if voice_source == CREATE_FROM_SAMPLE:
+            try:
+                assessment = assess_reference_audio(ref_audio_path)
+            except ReferenceAudioError as exc:
+                raise gr.Error(str(exc)) from exc
+            if assessment.blocked:
+                raise gr.Error(assessment.message)
+            if assessment.level == "warning":
+                gr.Warning(assessment.message)
+
         ref_transcript = ref_transcript.strip()
         generated_path = voice_service.generate(
             ref_audio_path=ref_audio_path,
@@ -829,6 +862,14 @@ def save_generated_voice(
     if not ref_audio_path or not ref_transcript:
         raise gr.Error("The generated voice source is no longer available.")
 
+    if reusable_voice_source.get("voice_source") == CREATE_FROM_SAMPLE:
+        try:
+            assessment = assess_reference_audio(ref_audio_path)
+        except ReferenceAudioError as exc:
+            raise gr.Error(str(exc)) from exc
+        if assessment.blocked:
+            raise gr.Error(assessment.message)
+
     try:
         profile = profile_manager.create_profile(
             voice_name,
@@ -886,9 +927,18 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             type="filepath",
             autoplay=False,
         )
+        gr.Markdown(
+            "Best results: 3-10 seconds of clear speech with an accurate "
+            "matching transcript. Maximum: 15 seconds."
+        )
+        reference_audio_duration = gr.Markdown(visible=False)
         reference_transcript = gr.Textbox(
             label="2. Transcript",
             placeholder="Exact words spoken in the reference audio",
+        )
+        gr.Markdown(
+            "The transcript should accurately match every word spoken in the "
+            "reference audio."
         )
         reference_transcript_file = gr.File(
             label="Import Transcript (.txt)",
@@ -1222,6 +1272,11 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
             save_voice_confirmation,
             reusable_voice_state,
         ],
+    )
+    reference_audio.change(
+        fn=show_reference_audio_guidance,
+        inputs=reference_audio,
+        outputs=reference_audio_duration,
     )
     reference_transcript.change(
         fn=clear_sample_save_state,
