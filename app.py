@@ -13,6 +13,7 @@ OUTPUT_DIR = PROJECT_ROOT / "generated_audio"
 PROFILES_DIR = PROJECT_ROOT / "voice_profiles"
 CREATE_FROM_SAMPLE = "Create from Sample"
 DESIGN_VOICE = "Design Voice"
+RANDOM_VOICE = "Random Voice"
 VOICE_LIBRARY = "Voice Library"
 UNSPECIFIED = "Any / unspecified"
 NORMAL_UNSPECIFIED = "Normal / unspecified"
@@ -145,23 +146,35 @@ def switch_voice_source(
     dict,
     dict,
     dict,
+    dict,
+    dict,
+    dict,
     None,
     dict,
     dict,
 ]:
     """Switch top-level workflows and close transient panels."""
-    if voice_source not in {CREATE_FROM_SAMPLE, DESIGN_VOICE, VOICE_LIBRARY}:
+    if voice_source not in {
+        CREATE_FROM_SAMPLE,
+        DESIGN_VOICE,
+        RANDOM_VOICE,
+        VOICE_LIBRARY,
+    }:
         raise gr.Error("Invalid voice source.")
 
     sample_mode = voice_source == CREATE_FROM_SAMPLE
     design_mode = voice_source == DESIGN_VOICE
+    random_mode = voice_source == RANDOM_VOICE
     library_mode = voice_source == VOICE_LIBRARY
     return (
         gr.update(visible=sample_mode),
         gr.update(visible=design_mode),
+        gr.update(visible=random_mode),
         gr.update(visible=library_mode),
         gr.update(label="3. Dialogue" if sample_mode else "Dialogue"),
         gr.update(label="Output Audio" if library_mode else "Generated Audio"),
+        gr.update(value="Generate Random Voice" if random_mode else "Generate"),
+        gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(value="", visible=False),
@@ -274,12 +287,28 @@ def generate_voice(
     design_pitch: str | None = None,
     design_style: str | None = None,
     design_accent: str | None = None,
-) -> tuple[str, dict, dict[str, str] | None, dict, dict, dict]:
+) -> tuple[str, dict, dict[str, str] | None, dict, dict, dict, dict]:
     """Resolve the selected source and generate one WAV file."""
     reusable_voice_source: dict[str, str] | None = None
     output_path = OUTPUT_DIR / f"generation_{uuid4().hex}.wav"
 
-    if voice_source == DESIGN_VOICE:
+    if voice_source == RANDOM_VOICE:
+        if not dialogue or not dialogue.strip():
+            raise gr.Error("Dialogue is required.")
+
+        dialogue = dialogue.strip()
+        generated_path = voice_service.generate_random_voice(
+            generation_text=dialogue,
+            output_path=output_path,
+        )
+        # Auto Voice does not recreate a prior speaker, so preserve this exact
+        # candidate as the cloning reference if the user chooses to save it.
+        reusable_voice_source = {
+            "voice_source": RANDOM_VOICE,
+            "ref_audio_path": generated_path,
+            "ref_transcript": dialogue,
+        }
+    elif voice_source == DESIGN_VOICE:
         if not dialogue or not dialogue.strip():
             raise gr.Error("Dialogue is required.")
 
@@ -351,6 +380,7 @@ def generate_voice(
         gr.update(visible=reusable_voice_source is not None),
         gr.update(visible=False),
         gr.update(value="", visible=False),
+        gr.update(visible=voice_source == RANDOM_VOICE),
     )
 
 
@@ -391,6 +421,7 @@ def save_generated_voice(
     if not reusable_voice_source or reusable_voice_source.get("voice_source") not in {
         CREATE_FROM_SAMPLE,
         DESIGN_VOICE,
+        RANDOM_VOICE,
     }:
         raise gr.Error("Generate a voice before saving it for reuse.")
 
@@ -436,7 +467,7 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
     gr.Markdown("# NPC Voice Studio")
 
     voice_source = gr.Radio(
-        choices=[CREATE_FROM_SAMPLE, DESIGN_VOICE, VOICE_LIBRARY],
+        choices=[CREATE_FROM_SAMPLE, DESIGN_VOICE, RANDOM_VOICE, VOICE_LIBRARY],
         value=CREATE_FROM_SAMPLE,
         label="Voice Source",
     )
@@ -487,6 +518,13 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
                 value=UNSPECIFIED,
                 label="English Accent",
             )
+
+    with gr.Column(visible=False) as random_voice_panel:
+        gr.Markdown("## Random Voice")
+        gr.Markdown(
+            "Generate an original voice without providing a sample or choosing "
+            "voice characteristics."
+        )
 
     with gr.Column(visible=False) as voice_library_panel:
         gr.Markdown("## My Voices")
@@ -545,6 +583,11 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         type="filepath",
         buttons=["download"],
     )
+    try_another_button = gr.Button(
+        "Try Another",
+        variant="secondary",
+        visible=False,
+    )
     download_generated_audio = gr.DownloadButton(
         "Download Generated Audio",
         value=None,
@@ -589,9 +632,12 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         outputs=[
             create_from_sample_panel,
             design_voice_panel,
+            random_voice_panel,
             voice_library_panel,
             dialogue,
             output_audio,
+            generate_button,
+            try_another_button,
             save_voice_for_reuse_button,
             save_voice_panel,
             save_voice_confirmation,
@@ -661,28 +707,36 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         ],
     )
 
+    generation_inputs = [
+        voice_source,
+        user_voice_selector,
+        reference_audio,
+        reference_transcript,
+        dialogue,
+        design_gender,
+        design_age,
+        design_pitch,
+        design_style,
+        design_accent,
+    ]
+    generation_outputs = [
+        output_audio,
+        download_generated_audio,
+        reusable_voice_state,
+        save_voice_for_reuse_button,
+        save_voice_panel,
+        save_voice_confirmation,
+        try_another_button,
+    ]
     generate_button.click(
         fn=generate_voice,
-        inputs=[
-            voice_source,
-            user_voice_selector,
-            reference_audio,
-            reference_transcript,
-            dialogue,
-            design_gender,
-            design_age,
-            design_pitch,
-            design_style,
-            design_accent,
-        ],
-        outputs=[
-            output_audio,
-            download_generated_audio,
-            reusable_voice_state,
-            save_voice_for_reuse_button,
-            save_voice_panel,
-            save_voice_confirmation,
-        ],
+        inputs=generation_inputs,
+        outputs=generation_outputs,
+    )
+    try_another_button.click(
+        fn=generate_voice,
+        inputs=generation_inputs,
+        outputs=generation_outputs,
     )
     save_voice_for_reuse_button.click(
         fn=show_save_voice_panel,
