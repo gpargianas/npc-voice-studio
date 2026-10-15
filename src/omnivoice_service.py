@@ -1,8 +1,42 @@
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+import logging
+import os
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
 import soundfile as sf
 import torch
 from omnivoice import OmniVoice
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BatchGenerationRequest:
+    generation_text: str
+    output_path: Path
+
+
+@dataclass(frozen=True)
+class BatchGenerationResult:
+    output_path: Path
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class BatchVoiceContext:
+    """Keep one encoded OmniVoice cloning prompt in the Gradio session."""
+
+    voice_clone_prompt: Any
+
+
+@dataclass(frozen=True)
+class BatchGenerationRun:
+    results: list[BatchGenerationResult]
+    voice_context: BatchVoiceContext
 
 
 class OmniVoiceService:
@@ -105,3 +139,141 @@ class OmniVoiceService:
 
         sf.write(str(output_file), audio[0], self.sample_rate)
         return str(output_file)
+
+    def generate_batch(
+        self,
+        ref_audio_path: str | Path,
+        ref_text: str,
+        requests: Sequence[BatchGenerationRequest],
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> BatchGenerationRun:
+        """Generate sequentially while reusing one encoded cloning prompt."""
+        if not ref_audio_path:
+            raise ValueError("Reference audio is required.")
+        reference_path = Path(ref_audio_path)
+        if not reference_path.is_file():
+            raise FileNotFoundError(f"Reference audio not found: {reference_path}")
+        if not ref_text or not ref_text.strip():
+            raise ValueError("Reference transcript is required.")
+        if not requests:
+            raise ValueError("At least one batch item is required.")
+
+        # Encoding the saved voice is expensive, so do it once for the batch.
+        voice_context = self._create_batch_voice_context(
+            reference_path,
+            ref_text,
+        )
+
+        results: list[BatchGenerationResult] = []
+        total = len(requests)
+        for index, request in enumerate(requests, start=1):
+            output_file = Path(request.output_path)
+            existed_before = output_file.exists()
+            try:
+                if not request.generation_text or not request.generation_text.strip():
+                    raise ValueError("Generation text is required.")
+                if output_file.exists():
+                    raise FileExistsError(
+                        f"Output file already exists: {output_file.name}"
+                    )
+
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                audio = self._model.generate(
+                    text=request.generation_text,
+                    voice_clone_prompt=voice_context.voice_clone_prompt,
+                )
+                if not audio:
+                    raise RuntimeError("OmniVoice did not return generated audio.")
+
+                sf.write(str(output_file), audio[0], self.sample_rate)
+                results.append(BatchGenerationResult(output_file))
+            except Exception as exc:  # Keep later dialogue lines running.
+                if not existed_before:
+                    output_file.unlink(missing_ok=True)
+                logger.exception(
+                    "Batch generation failed for %s", output_file.name
+                )
+                results.append(
+                    BatchGenerationResult(
+                        output_file,
+                        f"{type(exc).__name__}: {exc}",
+                    )
+                )
+            finally:
+                if progress_callback is not None:
+                    try:
+                        progress_callback(index, total)
+                    except Exception:
+                        logger.warning(
+                            "Batch progress update failed after item %s", index
+                        )
+
+        return BatchGenerationRun(results, voice_context)
+
+    def regenerate_batch_line(
+        self,
+        generation_text: str,
+        output_path: str | Path,
+        voice_context: BatchVoiceContext | None = None,
+        ref_audio_path: str | Path | None = None,
+        ref_text: str | None = None,
+    ) -> tuple[BatchGenerationResult, BatchVoiceContext]:
+        """Safely replace one batch WAV while preserving a working prior file."""
+        if not generation_text or not generation_text.strip():
+            raise ValueError("Generation text is required.")
+        if not output_path:
+            raise ValueError("Output path is required.")
+
+        if voice_context is None:
+            if not ref_audio_path or not ref_text:
+                raise ValueError("Reference audio and transcript are required.")
+            reference_path = Path(ref_audio_path)
+            if not reference_path.is_file():
+                raise FileNotFoundError(
+                    f"Reference audio not found: {reference_path}"
+                )
+            voice_context = self._create_batch_voice_context(
+                reference_path,
+                ref_text,
+            )
+
+        output_file = Path(output_path)
+        if not output_file.parent.is_dir():
+            raise FileNotFoundError("The batch output directory no longer exists.")
+        temporary_file = output_file.with_name(
+            f".{output_file.stem}.{uuid4().hex}.tmp.wav"
+        )
+
+        try:
+            audio = self._model.generate(
+                text=generation_text,
+                voice_clone_prompt=voice_context.voice_clone_prompt,
+            )
+            if not audio:
+                raise RuntimeError("OmniVoice did not return generated audio.")
+
+            sf.write(str(temporary_file), audio[0], self.sample_rate)
+            os.replace(temporary_file, output_file)
+            return BatchGenerationResult(output_file), voice_context
+        except Exception as exc:
+            temporary_file.unlink(missing_ok=True)
+            logger.exception("Batch line regeneration failed for %s", output_file.name)
+            return (
+                BatchGenerationResult(
+                    output_file,
+                    f"{type(exc).__name__}: {exc}",
+                ),
+                voice_context,
+            )
+
+    def _create_batch_voice_context(
+        self,
+        reference_path: Path,
+        ref_text: str,
+    ) -> BatchVoiceContext:
+        """Encode one saved reference for reuse across a batch session."""
+        prompt = self._model.create_voice_clone_prompt(
+            ref_audio=str(reference_path),
+            ref_text=ref_text.strip(),
+        )
+        return BatchVoiceContext(prompt)
