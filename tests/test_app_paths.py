@@ -38,6 +38,21 @@ class AppPathTests(unittest.TestCase):
             Path("/var/example/data/npc-voice-studio").resolve(),
         )
 
+    def test_gradio_allowlist_contains_only_browser_served_directories(self) -> None:
+        paths = resolve_app_paths(
+            environ={"NPC_VOICE_STUDIO_DATA_DIR": "runtime-data"},
+            home=Path("home"),
+            platform_name="posix",
+        )
+
+        self.assertEqual(
+            paths.gradio_allowed_paths,
+            (paths.generated_audio, paths.voice_profiles),
+        )
+        self.assertNotIn(paths.root, paths.gradio_allowed_paths)
+        self.assertNotIn(paths.logs, paths.gradio_allowed_paths)
+        self.assertTrue(all(path.is_absolute() for path in paths.gradio_allowed_paths))
+
 
 if __name__ == "__main__":
     unittest.main()

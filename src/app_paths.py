@@ -17,6 +17,11 @@ class AppPaths:
     generated_audio: Path
     logs: Path
 
+    @property
+    def gradio_allowed_paths(self) -> tuple[Path, Path]:
+        """Runtime directories whose files the browser legitimately consumes."""
+        return (self.generated_audio, self.voice_profiles)
+
 
 def resolve_app_paths(
     environ: Mapping[str, str] | None = None,

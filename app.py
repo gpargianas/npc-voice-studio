@@ -1463,5 +1463,6 @@ if __name__ == "__main__":
         css=BATCH_TABLE_CSS,
         server_name="127.0.0.1",
         share=False,
+        allowed_paths=[str(path) for path in APP_PATHS.gradio_allowed_paths],
         show_error=False,
     )
