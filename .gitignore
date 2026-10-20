@@ -2,10 +2,31 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .numba_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 generated_audio/
 voice_profiles/
+logs/
+models/
+*.ckpt
+*.onnx
+*.pt
+*.pth
+*.safetensors
 
 .env
 .venv/
 venv/
+
+build/
+dist/
+*.egg-info/
+release/
+installer-output/
+
+.idea/
+.vscode/
+*.log

@@ -201,7 +201,7 @@ class BatchServiceTests(unittest.TestCase):
                 )
             )
             self.assertIsNone(results[0].error)
-            self.assertIn("deliberate test failure", results[1].error or "")
+            self.assertIn("application log", results[1].error or "")
             self.assertIsNone(results[2].error)
             self.assertTrue((root / "first.wav").is_file())
             self.assertFalse((root / "failed.wav").exists())
@@ -263,7 +263,7 @@ class BatchServiceTests(unittest.TestCase):
                     root / "second.wav",
                     voice_context=run.voice_context,
                 )
-            self.assertIn("deliberate test failure", failed_result.error or "")
+            self.assertIn("application log", failed_result.error or "")
             self.assertEqual((root / "second.wav").read_bytes(), working_audio)
 
     def test_failed_line_can_be_retried_with_the_same_prompt(self) -> None:
@@ -282,7 +282,7 @@ class BatchServiceTests(unittest.TestCase):
                     "Matching reference transcript.",
                     [BatchGenerationRequest("FAIL", failed_output)],
                 )
-            self.assertIsNotNone(run.results[0].error)
+            self.assertIn("application log", run.results[0].error or "")
             self.assertFalse(failed_output.exists())
 
             result, context = service.regenerate_batch_line(

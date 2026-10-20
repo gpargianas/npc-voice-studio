@@ -1,5 +1,7 @@
+from collections.abc import Callable
 import logging
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import gradio as gr
@@ -12,18 +14,20 @@ from src.batch_generation import (
     parse_dialogue_csv,
     validate_batch_table,
 )
+from src.app_logging import configure_logging
+from src.app_paths import APP_PATHS
+from src.error_messages import generation_error_message
+from src.model_runtime import ModelUnavailableError, OmniVoiceRuntime
 from src.omnivoice_service import (
     BatchGenerationRequest,
     BatchVoiceContext,
-    OmniVoiceService,
 )
 from src.reference_audio import ReferenceAudioError, assess_reference_audio
 from src.voice_profiles import VoiceProfileError, VoiceProfileManager
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = PROJECT_ROOT / "generated_audio"
-PROFILES_DIR = PROJECT_ROOT / "voice_profiles"
+OUTPUT_DIR = APP_PATHS.generated_audio
+PROFILES_DIR = APP_PATHS.voice_profiles
 CREATE_FROM_SAMPLE = "Create from Sample"
 DESIGN_VOICE = "Design Voice"
 RANDOM_VOICE = "Random Voice"
@@ -44,6 +48,7 @@ BATCH_TABLE_CSS = """
 }
 """
 
+LOG_PATH = configure_logging(APP_PATHS.logs)
 logger = logging.getLogger(__name__)
 
 DIALOGUE_HELP = """
@@ -124,9 +129,40 @@ VOICE_DESIGN_VALUES = {
     },
 }
 
-# Keep one model instance alive for every generation request.
-voice_service = OmniVoiceService()
+# The model is initialized after the UI opens and remains shared for this process.
+voice_runtime = OmniVoiceRuntime()
 profile_manager = VoiceProfileManager(PROFILES_DIR)
+logger.info("NPC Voice Studio starting with data directory %s", APP_PATHS.root)
+if LOG_PATH is not None:
+    logger.info("Application log: %s", LOG_PATH)
+
+
+def initialize_model_status() -> str:
+    """Load OmniVoice once and report a concise status in the open UI."""
+    service = voice_runtime.initialize()
+    if service is None:
+        return f"**OmniVoice unavailable:** {voice_runtime.error_message}"
+    return f"**OmniVoice ready** on `{service.device}`."
+
+
+def _require_voice_service() -> Any:
+    try:
+        return voice_runtime.require()
+    except ModelUnavailableError as exc:
+        raise gr.Error(str(exc)) from exc
+
+
+def _run_generation(mode: str, operation: Callable[[], str]) -> str:
+    """Keep technical inference failures in logs and concise errors in the UI."""
+    try:
+        return operation()
+    except Exception as exc:
+        logger.exception(
+            "Voice generation failed in %s mode (%s)",
+            mode,
+            type(exc).__name__,
+        )
+        raise gr.Error(generation_error_message(exc)) from exc
 
 
 def load_text_file(file_path: str | None) -> str:
@@ -216,7 +252,13 @@ def _voice_error_message(error: VoiceProfileError) -> str:
 def get_user_voice_choices() -> list[tuple[str, str]]:
     """Return radio choices with duration while keeping stored names as values."""
     choices: list[tuple[str, str]] = []
-    for name in profile_manager.list_profiles():
+    try:
+        profile_names = profile_manager.list_profiles()
+    except VoiceProfileError:
+        logger.exception("Saved voice storage could not be listed")
+        return choices
+
+    for name in profile_names:
         try:
             profile = profile_manager.get_profile(name)
             duration = sf.info(profile.reference_audio_path).duration
@@ -502,8 +544,13 @@ def generate_batch(
     except VoiceProfileError as exc:
         raise gr.Error(_voice_error_message(exc)) from exc
 
+    service = _require_voice_service()
     batch_directory = OUTPUT_DIR / "batches" / uuid4().hex
-    batch_directory.mkdir(parents=True, exist_ok=False)
+    try:
+        batch_directory.mkdir(parents=True, exist_ok=False)
+    except OSError as exc:
+        logger.exception("Could not create batch output directory")
+        raise gr.Error(generation_error_message(exc)) from exc
     requests = [
         BatchGenerationRequest(
             generation_text=row.text,
@@ -518,7 +565,7 @@ def generate_batch(
         progress((completed, total), desc=f"Generating {completed} / {total}")
 
     try:
-        run = voice_service.generate_batch(
+        run = service.generate_batch(
             ref_audio_path=profile.reference_audio_path,
             ref_text=profile.transcript,
             requests=requests,
@@ -526,8 +573,7 @@ def generate_batch(
         )
     except Exception as exc:
         logger.exception("Batch generation could not start")
-        error = str(exc).replace("\n", " ")[:180]
-        raise gr.Error(f"Batch generation could not start: {error}") from exc
+        raise gr.Error(generation_error_message(exc)) from exc
 
     generated_rows: list[dict[str, str]] = []
     successful_files: list[Path] = []
@@ -620,7 +666,8 @@ def regenerate_batch_line(
     except VoiceProfileError as exc:
         raise gr.Error(_voice_error_message(exc)) from exc
 
-    result, refreshed_context = voice_service.regenerate_batch_line(
+    service = _require_voice_service()
+    result, refreshed_context = service.regenerate_batch_line(
         generation_text=edited_text,
         output_path=output_path,
         voice_context=voice_context,
@@ -734,9 +781,13 @@ def generate_voice(
             raise gr.Error("Dialogue is required.")
 
         dialogue = dialogue.strip()
-        generated_path = voice_service.generate_random_voice(
-            generation_text=dialogue,
-            output_path=output_path,
+        service = _require_voice_service()
+        generated_path = _run_generation(
+            RANDOM_VOICE,
+            lambda: service.generate_random_voice(
+                generation_text=dialogue,
+                output_path=output_path,
+            ),
         )
         # Auto Voice does not recreate a prior speaker, so preserve this exact
         # candidate as the cloning reference if the user chooses to save it.
@@ -762,10 +813,14 @@ def generate_voice(
             )
 
         dialogue = dialogue.strip()
-        generated_path = voice_service.generate_designed_voice(
-            generation_text=dialogue,
-            instruct=instruct,
-            output_path=output_path,
+        service = _require_voice_service()
+        generated_path = _run_generation(
+            DESIGN_VOICE,
+            lambda: service.generate_designed_voice(
+                generation_text=dialogue,
+                instruct=instruct,
+                output_path=output_path,
+            ),
         )
         # A design instruction does not guarantee the same speaker on a later
         # run, so reuse the successful output as a normal cloning reference.
@@ -805,11 +860,15 @@ def generate_voice(
                 gr.Warning(assessment.message)
 
         ref_transcript = ref_transcript.strip()
-        generated_path = voice_service.generate(
-            ref_audio_path=ref_audio_path,
-            ref_text=ref_transcript,
-            generation_text=dialogue,
-            output_path=output_path,
+        service = _require_voice_service()
+        generated_path = _run_generation(
+            voice_source,
+            lambda: service.generate(
+                ref_audio_path=ref_audio_path,
+                ref_text=ref_transcript,
+                generation_text=dialogue,
+                output_path=output_path,
+            ),
         )
 
         if voice_source == CREATE_FROM_SAMPLE:
@@ -905,8 +964,9 @@ def save_generated_voice(
 
 initial_user_voice_choices = get_user_voice_choices()
 
-with gr.Blocks(title="NPC Voice Studio") as demo:
+with gr.Blocks(title="NPC Voice Studio", analytics_enabled=False) as demo:
     gr.Markdown("# NPC Voice Studio")
+    model_status = gr.Markdown("Initializing OmniVoice...")
 
     voice_source = gr.Radio(
         choices=[
@@ -1158,6 +1218,10 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
         # Stores the exact source created by the last successful generation.
         reusable_voice_state = gr.State(value=None)
 
+    demo.load(
+        fn=initialize_model_status,
+        outputs=model_status,
+    )
     reference_transcript_file.upload(
         fn=load_text_file,
         inputs=reference_transcript_file,
@@ -1394,4 +1458,10 @@ with gr.Blocks(title="NPC Voice Studio") as demo:
 
 
 if __name__ == "__main__":
-    demo.queue(default_concurrency_limit=1).launch(css=BATCH_TABLE_CSS)
+    logger.info("Starting local Gradio server")
+    demo.queue(default_concurrency_limit=1).launch(
+        css=BATCH_TABLE_CSS,
+        server_name="127.0.0.1",
+        share=False,
+        show_error=False,
+    )

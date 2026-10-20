@@ -1,51 +1,70 @@
 # NPC Voice Studio
 
-Minimal local zero-shot voice cloning and voice design app using the already
-installed OmniVoice package.
+Local zero-shot voice cloning, voice design, random voice creation, reusable
+voices, and batch generation using OmniVoice.
 
-## Requirements
+## Validated Development Stack
 
-- Existing Conda environment: `npc-voice`
-- Installed OmniVoice package and model cache inside that environment
-- CUDA-capable GPU recommended; CPU is used when CUDA is unavailable
-- A local reference audio file and matching transcript
+- Python 3.11
+- OmniVoice 0.2.1
+- PyTorch and Torchaudio 2.8.0 with CUDA 12.8
+- Gradio 6.22.0
+- An NVIDIA CUDA-capable GPU is the currently validated path
 
-No package installation is required for this project.
-
-## Files
-
-- `src/omnivoice_service.py` loads OmniVoice once for cloning and voice design.
-- `src/f5_service.py` remains available temporarily as a rollback path.
-- `scripts/test_generation.py` runs one OmniVoice smoke test and saves `generated_audio/test_output.wav`.
-- `app.py` provides a minimal local Gradio interface.
-- `src/voice_profiles.py` stores reusable reference audio and matching transcripts.
+`requirements.txt` lists direct runtime requirements for the validated stack.
+It is a Phase A development specification, not the final Windows installer lock.
 
 ## Run The UI
 
-From the project root:
+Activate the existing environment and run from the project root:
 
 ```powershell
-C:\Users\Example\miniconda3\envs\npc-voice\python.exe app.py
+conda activate npc-voice
+python app.py
 ```
 
-Open the local URL printed by Gradio, then create from a reference sample,
-design a voice from supported speaker attributes, or reuse a voice from the library.
+The UI binds to `127.0.0.1`, Gradio sharing is disabled, and Gradio analytics
+are disabled. OmniVoice is initialized after the UI opens so startup failures
+can be shown without terminating the interface.
+
+## Runtime Data
+
+On Windows, mutable data is stored under:
+
+```text
+%LOCALAPPDATA%\NPC Voice Studio\
+    generated_audio\
+    voice_profiles\
+    logs\
+```
+
+Set `NPC_VOICE_STUDIO_DATA_DIR` to override this root for development. On
+non-Windows systems the fallback is `$XDG_DATA_HOME/npc-voice-studio`, or
+`~/.local/share/npc-voice-studio` when `XDG_DATA_HOME` is unset.
+
+Older development data in the repository's `generated_audio/` and
+`voice_profiles/` folders is not moved or deleted automatically.
+
+## Model Revision
+
+The application pins `k2-fsa/OmniVoice` to the tested Hugging Face revision:
+
+```text
+c5fdb5ccb189668d56333f77ba2629f4cd7535f4
+```
+
+The model is downloaded by Hugging Face when that revision is not already in
+the local cache. Model-load failures are recorded in the application log.
 
 ## Run The Smoke Test
 
-From the project root:
+Provide a local reference audio file and its exact transcript:
 
 ```powershell
-C:\Users\Example\miniconda3\envs\npc-voice\python.exe scripts\test_generation.py
+python scripts/test_generation.py reference.wav `
+    --reference-text "Exact words spoken in the reference audio."
 ```
 
-The smoke test uses F5-TTS's bundled example WAV only as a convenient local
-audio fixture while the rollback package remains installed. Inference is performed
-by `OmniVoiceService`. To use your own reference, edit `scripts/test_generation.py`:
-
-```python
-ref_audio_path = "path/to/your/reference.wav"
-ref_text = "Exact transcript of the reference audio."
-```
-
-Keep the reference clip clean, short, and accurately transcribed for best results.
+By default the result is written to the centralized `generated_audio` directory.
+Keep cloning references clear, accurately transcribed, and no longer than 15
+seconds; approximately 3-10 seconds is recommended.

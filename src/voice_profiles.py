@@ -1,7 +1,11 @@
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 import re
 import shutil
+
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceProfileError(ValueError):
@@ -29,8 +33,6 @@ class VoiceProfileManager:
 
     def __init__(self, profiles_directory: str | Path) -> None:
         self.profiles_directory = Path(profiles_directory).resolve()
-        # Profile data is runtime state, so the directory is not tracked in Git.
-        self.profiles_directory.mkdir(parents=True, exist_ok=True)
 
     def create_profile(
         self,
@@ -60,6 +62,8 @@ class VoiceProfileManager:
         transcript_path = profile_directory / "transcript.txt"
 
         try:
+            # Runtime storage is created only when a voice is first saved.
+            self.profiles_directory.mkdir(parents=True, exist_ok=True)
             profile_directory.mkdir()
             # Preserve the uploaded bytes; the inference service preprocesses later.
             shutil.copy2(source_audio, reference_audio)
@@ -71,7 +75,11 @@ class VoiceProfileManager:
         except OSError as exc:
             if profile_directory.exists():
                 shutil.rmtree(profile_directory, ignore_errors=True)
-            raise VoiceProfileError("Could not save the voice profile.") from exc
+            logger.exception("Could not save voice profile %s", safe_name)
+            raise VoiceProfileError(
+                "Voice storage is not writable. Check folder permissions and "
+                "available disk space."
+            ) from exc
 
         return VoiceProfile(safe_name, reference_audio, transcript)
 
@@ -107,14 +115,21 @@ class VoiceProfileManager:
 
     def list_profiles(self) -> list[str]:
         profiles: list[str] = []
-        for path in self.profiles_directory.iterdir():
-            if not path.is_dir():
-                continue
-            try:
-                self.get_profile(path.name)
-            except VoiceProfileError:
-                continue
-            profiles.append(path.name)
+        if not self.profiles_directory.exists():
+            return profiles
+        try:
+            paths = list(self.profiles_directory.iterdir())
+        except OSError as exc:
+            logger.exception("Could not read voice profile storage")
+            raise VoiceProfileError("Could not access saved voice storage.") from exc
+
+        for path in paths:
+            if path.is_dir():
+                try:
+                    self.get_profile(path.name)
+                except VoiceProfileError:
+                    continue
+                profiles.append(path.name)
 
         return sorted(profiles, key=str.casefold)
 
@@ -131,6 +146,7 @@ class VoiceProfileManager:
         try:
             shutil.rmtree(profile_directory)
         except OSError as exc:
+            logger.exception("Could not delete voice profile %s", safe_name)
             raise VoiceProfileError(
                 f'Could not delete voice profile "{safe_name}".'
             ) from exc

@@ -1,0 +1,10 @@
+# Phase A runtime requirements for Python 3.11 on the validated CUDA 12.8 stack.
+# The PyTorch index is required for the +cu128 wheels.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+omnivoice==0.2.1
+gradio==6.22.0
+huggingface-hub==1.26.0
+soundfile==0.14.0
