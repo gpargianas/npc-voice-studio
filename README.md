@@ -11,8 +11,25 @@ voices, and batch generation using OmniVoice.
 - Gradio 6.22.0
 - An NVIDIA CUDA-capable GPU is the currently validated path
 
-`requirements.txt` lists direct runtime requirements for the validated stack.
-It is a Phase A development specification, not the final Windows installer lock.
+`requirements.txt` pins the direct runtime requirements and OmniVoice's
+first-level dependencies for the validated stack. It is a source-install
+specification, not a Windows installer lock.
+
+## Clean Environment Verification
+
+The reproducibility procedure, isolated model-cache test, external dependency
+audit, and failure checks are documented in
+[`docs/clean-environment-test.md`](docs/clean-environment-test.md). The process
+uses a separate `npc-voice-clean` Conda environment and does not modify the
+known-good `npc-voice` environment.
+
+## Managed Runtime Foundation
+
+`pyproject.toml` and `uv.lock` are the source of truth for the future packaged
+Windows runtime. `requirements.txt` remains temporarily for manual and Conda
+development compatibility. See
+[`docs/phase-c1-uv-runtime.md`](docs/phase-c1-uv-runtime.md) for the bootstrap,
+clean-launch, and repair procedures.
 
 ## Run The UI
 
