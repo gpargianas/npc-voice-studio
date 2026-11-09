@@ -76,9 +76,8 @@ uv sync `
 .\.venv\Scripts\python.exe .\app.py
 ```
 
-The model setup command downloads and validates the pinned OmniVoice model
-(approximately 3.3 GB). `app.py` intentionally uses local-only model resolution
-and does not download a missing model by itself.
+The model setup command downloads and validates the pinned OmniVoice model locally
+(approximately 3.3 GB).
 
 Open the local URL printed by Gradio, normally:
 
@@ -88,7 +87,7 @@ http://127.0.0.1:7860
 
 ## Application Data
 
-On Windows, mutable data is stored under:
+On Windows, data is stored under:
 
 ```text
 %LOCALAPPDATA%\NPC Voice Studio\
@@ -99,15 +98,6 @@ On Windows, mutable data is stored under:
     logs\
 ```
 
-Normal uninstall removes the installed application but preserves this data.
-
-No environment variables are required. Source developers may keep their data
-separate from an installed copy by setting the following before both model
-setup and application launch:
-
-```powershell
-$env:NPC_VOICE_STUDIO_DATA_DIR = Join-Path $env:LOCALAPPDATA "NPC Voice Studio Dev"
-```
 
 ## Reference Audio
 
