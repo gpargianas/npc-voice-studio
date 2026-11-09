@@ -13,6 +13,8 @@ class AppPathTests(unittest.TestCase):
         )
 
         self.assertEqual(paths.root.name, APP_NAME)
+        self.assertEqual(paths.runtime.parent, paths.root)
+        self.assertEqual(paths.models.parent, paths.root)
         self.assertEqual(paths.voice_profiles.parent, paths.root)
         self.assertEqual(paths.generated_audio.parent, paths.root)
         self.assertEqual(paths.logs.parent, paths.root)
@@ -51,6 +53,8 @@ class AppPathTests(unittest.TestCase):
         )
         self.assertNotIn(paths.root, paths.gradio_allowed_paths)
         self.assertNotIn(paths.logs, paths.gradio_allowed_paths)
+        self.assertNotIn(paths.models, paths.gradio_allowed_paths)
+        self.assertNotIn(paths.runtime, paths.gradio_allowed_paths)
         self.assertTrue(all(path.is_absolute() for path in paths.gradio_allowed_paths))
 
 

@@ -31,6 +31,36 @@ development compatibility. See
 [`docs/phase-c1-uv-runtime.md`](docs/phase-c1-uv-runtime.md) for the bootstrap,
 clean-launch, and repair procedures.
 
+## User-Facing Windows Bootstrap
+
+Phase C2 adds a small Windows Forms launcher that checks system prerequisites,
+prepares or repairs the managed runtime, validates/downloads the pinned
+OmniVoice model, starts the loopback-only UI, and opens the browser. The
+pretrained weights remain subject to separate CC-BY-NC/non-commercial terms
+documented in `THIRD_PARTY_NOTICES.md`. See
+[`docs/phase-c2-user-bootstrap.md`](docs/phase-c2-user-bootstrap.md).
+
+During development, launch it with the verified uv 0.13.5 artifact:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\launch_npc_voice_studio.ps1 `
+    -UvPath C:\path\to\verified\uv.exe
+```
+
+The future installer will place that verified artifact at `tools\uv\uv.exe`;
+the launcher never uses Python, Conda, or uv from `PATH`.
+
+## Windows Alpha Release
+
+Phase C3 provides a tiny x64 GUI launcher, per-user Inno Setup configuration,
+explicit immutable release staging, licensing notices, checksum generation, and
+clean-machine acceptance instructions. Build and signing details are in
+[`docs/phase-c3-windows-release.md`](docs/phase-c3-windows-release.md).
+
+The installer remains small: it does not bundle Python, Torch, OmniVoice, or
+model weights. First launch installs the locked runtime and separately downloads
+the pinned model into the user's application-data directory.
+
 ## Run The UI
 
 Activate the existing environment and run from the project root:
@@ -85,3 +115,11 @@ python scripts/test_generation.py reference.wav `
 By default the result is written to the centralized `generated_audio` directory.
 Keep cloning references clear, accurately transcribed, and no longer than 15
 seconds; approximately 3-10 seconds is recommended.
+
+## License
+
+NPC Voice Studio's original source code is licensed under Apache License 2.0.
+Third-party software and the OmniVoice pretrained model remain under their own
+terms; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). In particular,
+the OmniVoice pretrained weights are not licensed by NPC Voice Studio and the
+upstream model card restricts them to non-commercial use.

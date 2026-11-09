@@ -1,14 +1,38 @@
 param(
     [string]$UvPath,
     [switch]$Repair,
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [string]$StatusFile
 )
 
 $ErrorActionPreference = "Stop"
-$ExpectedUvVersion = "0.13.5"
-$ExpectedUvSha256 = "F45D1CB9D9140CA6D3F4005FDFC0EBECCF849FD04D1DC85804155CB923F1597B"
-$PythonVersion = "3.11.15"
 $SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$Manifest = Get-Content -LiteralPath (Join-Path $SourceRoot "runtime_manifest.json") -Raw | ConvertFrom-Json
+$ExpectedUvVersion = [string]$Manifest.uv_version
+$ExpectedUvSha256 = ([string]$Manifest.uv_sha256).ToUpperInvariant()
+$PythonVersion = [string]$Manifest.python_version
+. (Join-Path $PSScriptRoot "managed_python_bootstrap.ps1")
+
+function Set-BootstrapStatus(
+    [string]$Message,
+    [int]$Percent,
+    [string]$Detail = ""
+) {
+    if ($StatusFile) {
+        $StatusDirectory = Split-Path -Parent $StatusFile
+        if ($StatusDirectory) {
+            New-Item -ItemType Directory -Force -Path $StatusDirectory | Out-Null
+        }
+        $Payload = [ordered]@{
+            operation = $Message
+            percent = [Math]::Max(0, [Math]::Min(100, $Percent))
+            detail = $Detail
+        } | ConvertTo-Json -Compress
+        $TemporaryStatus = "$StatusFile.tmp"
+        Set-Content -LiteralPath $TemporaryStatus -Value $Payload -Encoding UTF8
+        Move-Item -LiteralPath $TemporaryStatus -Destination $StatusFile -Force
+    }
+}
 
 if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne "X64") {
     throw "NPC Voice Studio v0.1 requires Windows x64."
@@ -44,35 +68,27 @@ if ($AppRoot.StartsWith($SourceRoot + [IO.Path]::DirectorySeparatorChar, [String
 $RuntimeRoot = Join-Path $AppRoot "runtime"
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $RuntimeRoot "python"
 $env:UV_CACHE_DIR = Join-Path $RuntimeRoot "uv-cache"
+$env:UV_DATA_DIR = Join-Path $RuntimeRoot "uv-data"
+$env:UV_PYTHON_BIN_DIR = Join-Path $RuntimeRoot "python-bin"
 $env:UV_NO_PROGRESS = "1"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONDONTWRITEBYTECODE = "1"
 
 New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
 
-Write-Host "Locating managed Python $PythonVersion..."
-$BootstrapPython = (& $UvPath python find $PythonVersion --managed-python 2>$null | Out-String).Trim()
-$PythonFindExitCode = $LASTEXITCODE
-$PythonInstallExitCode = 0
-if ($PythonFindExitCode -ne 0 -or -not (Test-Path -LiteralPath $BootstrapPython)) {
-    Write-Host "Installing managed Python $PythonVersion..."
-    & $UvPath python install $PythonVersion --install-dir $env:UV_PYTHON_INSTALL_DIR
-    $PythonInstallExitCode = $LASTEXITCODE
-    $BootstrapPython = (& $UvPath python find $PythonVersion --managed-python | Out-String).Trim()
-    $PythonFindExitCode = $LASTEXITCODE
+Set-BootstrapStatus "Checking managed Python..." 8
+$PythonStatusCallback = {
+    param([string]$Message, [int]$Percent, [string]$Detail)
+    Set-BootstrapStatus $Message $Percent $Detail
 }
-if ($PythonFindExitCode -ne 0 -or -not (Test-Path -LiteralPath $BootstrapPython)) {
-    throw "uv could not install or locate managed Python $PythonVersion (install exit code $PythonInstallExitCode)."
-}
-$ManagedRoot = (Resolve-Path -LiteralPath $env:UV_PYTHON_INSTALL_DIR).Path
-$ResolvedPython = (Resolve-Path -LiteralPath $BootstrapPython).Path
-if (-not $ResolvedPython.StartsWith($ManagedRoot + [IO.Path]::DirectorySeparatorChar)) {
-    throw "Refusing to use Python outside the app-managed runtime."
-}
-if ($PythonInstallExitCode -ne 0) {
-    # uv can fail while creating its optional minor-version link after the exact
-    # interpreter is installed. Continue only after locating it under our root;
-    # the Python version and complete environment are verified again below.
-    Write-Warning "uv reported exit code $PythonInstallExitCode after installation, but the exact managed interpreter was verified."
-}
+$ResolvedPython = Resolve-AppManagedPython `
+    -UvPath $UvPath `
+    -PythonVersion $PythonVersion `
+    -ManagedInstallRoot $env:UV_PYTHON_INSTALL_DIR `
+    -StatusCallback $PythonStatusCallback
+
+Set-BootstrapStatus "Preparing AI runtime..." 15
 
 $Arguments = @(
     (Join-Path $SourceRoot "scripts\bootstrap_runtime.py"),
@@ -85,8 +101,23 @@ if ($Repair) {
 if ($NoLaunch) {
     $Arguments += "--no-launch"
 }
+if ($StatusFile) {
+    $Arguments += @("--status-file", $StatusFile)
+}
 
-& $ResolvedPython @Arguments
-if ($LASTEXITCODE -ne 0) {
+& $ResolvedPython -u @Arguments
+$BootstrapExitCode = [int]$LASTEXITCODE
+if ($BootstrapExitCode -ne 0) {
     throw "NPC Voice Studio managed runtime bootstrap failed."
 }
+
+# The Python bootstrap creates this only after environment and GPU checks pass.
+$RuntimeReadyMarker = Join-Path $RuntimeRoot "runtime_ready.json"
+if (-not (Test-Path -LiteralPath $RuntimeReadyMarker -PathType Leaf)) {
+    throw "NPC Voice Studio managed runtime verification did not create its readiness marker."
+}
+
+# Make the component result explicit. A recoverable uv install/link failure must
+# never become the PowerShell process result after exact Python verification.
+$global:LASTEXITCODE = 0
+exit 0

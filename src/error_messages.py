@@ -15,6 +15,11 @@ def _error_text(error: BaseException) -> str:
 def model_load_error_message(error: BaseException) -> str:
     """Return a concise startup message while logs retain the traceback."""
     message = _error_text(error)
+    if "model installation is incomplete" in message:
+        return (
+            "The OmniVoice model installation is incomplete. Restart NPC Voice "
+            "Studio to repair/download the model."
+        )
     if "out of memory" in message or "cuda error: out of memory" in message:
         return "OmniVoice could not load because GPU memory is insufficient."
     if "cuda" in message or "cudnn" in message:

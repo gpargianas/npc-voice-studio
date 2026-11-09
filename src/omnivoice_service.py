@@ -9,6 +9,8 @@ from uuid import uuid4
 import soundfile as sf
 
 from src.error_messages import generation_error_message
+from src.app_paths import APP_PATHS
+from src.model_setup import ModelSpec, load_model_spec, resolve_installed_model
 
 
 logger = logging.getLogger(__name__)
@@ -49,29 +51,30 @@ class BatchGenerationRun:
 class OmniVoiceService:
     """Load OmniVoice once for cloning, voice design, and Auto Voice."""
 
-    MODEL_ID = "k2-fsa/OmniVoice"
-    # This is the exact model snapshot validated during the OmniVoice migration.
-    MODEL_REVISION = "c5fdb5ccb189668d56333f77ba2629f4cd7535f4"
-
-    def __init__(self, model_revision: str = MODEL_REVISION) -> None:
+    def __init__(
+        self,
+        models_root: str | Path | None = None,
+        model_spec: ModelSpec | None = None,
+    ) -> None:
         # Heavy ML imports stay inside guarded startup so the UI can always open.
         import torch
-        from huggingface_hub import snapshot_download
         from omnivoice import OmniVoice
 
         use_cuda = torch.cuda.is_available()
         self.device = "cuda:0" if use_cuda else "cpu"
         dtype = torch.float16 if use_cuda else torch.float32
-        self.model_revision = model_revision
+        spec = model_spec or load_model_spec()
+        self.model_id = spec.repository
+        self.model_revision = spec.revision
 
-        # Resolve the exact tested snapshot before OmniVoice loads its local files.
-        model_path = snapshot_download(
-            repo_id=self.MODEL_ID,
-            revision=self.model_revision,
+        # Setup owns downloads; inference resolves only its validated local cache.
+        model_path = resolve_installed_model(
+            models_root or APP_PATHS.models,
+            spec,
         )
         logger.info(
             "Loading OmniVoice model %s at revision %s on %s",
-            self.MODEL_ID,
+            self.model_id,
             self.model_revision,
             self.device,
         )

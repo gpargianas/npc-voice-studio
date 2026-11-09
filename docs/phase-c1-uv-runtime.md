@@ -4,6 +4,10 @@ Phase C1 establishes the future packaged runtime without building an installer.
 The existing `npc-voice` and `npc-voice-clean` Conda environments are reference
 environments only and are never modified by the bootstrap.
 
+Phase C2's user-facing orchestration is documented in
+[`phase-c2-user-bootstrap.md`](phase-c2-user-bootstrap.md); it delegates runtime
+installation and repair back to this C1 implementation.
+
 ## Source Of Truth
 
 - `pyproject.toml` declares Python 3.11, the validated direct dependencies, and
@@ -99,7 +103,8 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_runtime.ps1 `
 Use `-NoLaunch` to install and verify without starting Gradio. The bootstrap:
 
 1. verifies uv version and SHA-256;
-2. installs uv-managed CPython 3.11.15 beneath `runtime\python`;
+2. looks for exact uv-managed CPython 3.11.15 beneath `runtime\python` and,
+   when it is absent, explicitly installs it before looking it up again;
 3. stages runtime source beneath `runtime\project`;
 4. executes `uv sync --frozen` into `runtime\project\.venv`;
 5. runs `scripts/check_environment.py` with that exact managed interpreter;
@@ -177,6 +182,8 @@ The bootstrap exits nonzero with a direct error when:
 - `check_environment.py` fails, including CUDA verification.
 
 No failure path marks a partial runtime ready or falls back to another Python.
+A failed initial `uv python find` is the expected clean-machine state; a failed
+`uv python install 3.11.15` remains fatal and is recorded in the setup log.
 
 ## Installer Blockers Remaining
 

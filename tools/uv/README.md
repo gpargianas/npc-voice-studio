@@ -11,3 +11,7 @@ The binary is intentionally not committed during Phase C1.
 
 The bootstrap verifies the executable hash and exact version before use. During
 development, pass the same verified binary explicitly with `-UvPath`.
+
+`runtime_manifest.json` is the shared machine-readable source for this version
+and checksum. The Phase C2 launcher and C1 bootstrap both verify it; neither
+searches the user's `PATH` or downloads a replacement.

@@ -26,6 +26,8 @@ from src.reference_audio import ReferenceAudioError, assess_reference_audio
 from src.voice_profiles import VoiceProfileError, VoiceProfileManager
 
 
+SOURCE_ROOT = Path(__file__).resolve().parent
+FAVICON_PATH = SOURCE_ROOT / "assets" / "app_icon.png"
 OUTPUT_DIR = APP_PATHS.generated_audio
 PROFILES_DIR = APP_PATHS.voice_profiles
 CREATE_FROM_SAMPLE = "Create from Sample"
@@ -1461,6 +1463,7 @@ if __name__ == "__main__":
     logger.info("Starting local Gradio server")
     demo.queue(default_concurrency_limit=1).launch(
         css=BATCH_TABLE_CSS,
+        favicon_path=str(FAVICON_PATH) if FAVICON_PATH.is_file() else None,
         server_name="127.0.0.1",
         share=False,
         allowed_paths=[str(path) for path in APP_PATHS.gradio_allowed_paths],

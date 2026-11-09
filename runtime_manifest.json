@@ -1,0 +1,16 @@
+{
+  "application_version": "0.1.0",
+  "runtime_schema_version": 1,
+  "python_version": "3.11.15",
+  "uv_version": "0.13.5",
+  "uv_sha256": "f45d1cb9d9140ca6d3f4005fdfc0ebeccf849fd04d1dc85804155cb923f1597b",
+  "minimum_setup_free_bytes": 17179869184,
+  "model": {
+    "repository": "k2-fsa/OmniVoice",
+    "revision": "c5fdb5ccb189668d56333f77ba2629f4cd7535f4",
+    "approximate_download_bytes": 3511135764,
+    "license_identifier": "CC-BY-NC (version unspecified by upstream model card)",
+    "source_url": "https://huggingface.co/k2-fsa/OmniVoice",
+    "model_card_url": "https://huggingface.co/k2-fsa/OmniVoice/blob/c5fdb5ccb189668d56333f77ba2629f4cd7535f4/README.md"
+  }
+}

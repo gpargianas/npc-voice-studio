@@ -13,6 +13,8 @@ class AppPaths:
     """Central locations for mutable application data."""
 
     root: Path
+    runtime: Path
+    models: Path
     voice_profiles: Path
     generated_audio: Path
     logs: Path
@@ -48,6 +50,8 @@ def resolve_app_paths(
     root = root.resolve()
     return AppPaths(
         root=root,
+        runtime=root / "runtime",
+        models=root / "models",
         voice_profiles=root / "voice_profiles",
         generated_audio=root / "generated_audio",
         logs=root / "logs",
