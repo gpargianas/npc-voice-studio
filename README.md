@@ -20,7 +20,7 @@ and NVIDIA GPUs.
 
 ## Using the Windows Installer
 
-For normal use, download the v0.1.0 Windows installer from
+For normal use, download the v1.0 Windows installer from
 [GitHub Releases](https://github.com/gpargianas/npc-voice-studio/releases):
 
 ```text
