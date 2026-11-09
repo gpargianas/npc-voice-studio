@@ -1,125 +1,168 @@
 # NPC Voice Studio
 
-Local zero-shot voice cloning, voice design, random voice creation, reusable
-voices, and batch generation using OmniVoice.
+NPC Voice Studio is a local Windows application for creating character voices
+with [OmniVoice](https://github.com/k2-fsa/OmniVoice). It supports voice
+cloning from a short sample, voice design, random voice creation, reusable
+saved voices, and batch dialogue generation.
 
-## Validated Development Stack
+> **Alpha release:** NPC Voice Studio v0.1.0-alpha currently supports Windows
+> 10/11 x64 with an NVIDIA GPU. CPU, AMD, Linux, and macOS are not supported by
+> this release.
 
-- Python 3.11
-- OmniVoice 0.2.1
-- PyTorch and Torchaudio 2.8.0 with CUDA 12.8
-- Gradio 6.22.0
-- An NVIDIA CUDA-capable GPU is the currently validated path
+## Features
 
-`requirements.txt` pins the direct runtime requirements and OmniVoice's
-first-level dependencies for the validated stack. It is a source-install
-specification, not a Windows installer lock.
+- Clone a voice from reference audio and its matching transcript.
+- Design a voice from supported speaker characteristics.
+- Generate original random voice candidates.
+- Save generated or cloned voices for reuse.
+- Generate and download individual WAV files.
+- Generate multiple dialogue lines from CSV and download a ZIP archive.
+- Use OmniVoice dialogue tags and CMU/ARPAbet pronunciation overrides.
+- Run locally through a loopback-only Gradio interface.
 
-## Clean Environment Verification
+## Using the Windows Installer
 
-The reproducibility procedure, isolated model-cache test, external dependency
-audit, and failure checks are documented in
-[`docs/clean-environment-test.md`](docs/clean-environment-test.md). The process
-uses a separate `npc-voice-clean` Conda environment and does not modify the
-known-good `npc-voice` environment.
+For normal use, download the v0.1.0-alpha Windows installer from
+[GitHub Releases](https://github.com/gpargianas/npc-voice-studio/releases):
 
-## Managed Runtime Foundation
-
-`pyproject.toml` and `uv.lock` are the source of truth for the future packaged
-Windows runtime. `requirements.txt` remains temporarily for manual and Conda
-development compatibility. See
-[`docs/phase-c1-uv-runtime.md`](docs/phase-c1-uv-runtime.md) for the bootstrap,
-clean-launch, and repair procedures.
-
-## User-Facing Windows Bootstrap
-
-Phase C2 adds a small Windows Forms launcher that checks system prerequisites,
-prepares or repairs the managed runtime, validates/downloads the pinned
-OmniVoice model, starts the loopback-only UI, and opens the browser. The
-pretrained weights remain subject to separate CC-BY-NC/non-commercial terms
-documented in `THIRD_PARTY_NOTICES.md`. See
-[`docs/phase-c2-user-bootstrap.md`](docs/phase-c2-user-bootstrap.md).
-
-During development, launch it with the verified uv 0.13.5 artifact:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\launch_npc_voice_studio.ps1 `
-    -UvPath C:\path\to\verified\uv.exe
+```text
+NPC-Voice-Studio-0.1.0-alpha-win-x64.exe
 ```
 
-The future installer will place that verified artifact at `tools\uv\uv.exe`;
-the launcher never uses Python, Conda, or uv from `PATH`.
+The installer does not require administrator privileges. On first launch,
+NPC Voice Studio installs its managed Python and CUDA-enabled AI runtime, then
+downloads and validates the pinned OmniVoice model. This requires an internet
+connection, several minutes, and approximately 16 GiB of free disk space.
 
-## Windows Alpha Release
+After setup completes, normal launches and voice generation work offline. The
+application includes a **Repair Runtime** option that preserves models, saved
+voices, generated audio, and logs.
 
-Phase C3 provides a tiny x64 GUI launcher, per-user Inno Setup configuration,
-explicit immutable release staging, licensing notices, checksum generation, and
-clean-machine acceptance instructions. Build and signing details are in
-[`docs/phase-c3-windows-release.md`](docs/phase-c3-windows-release.md).
+You do not need to install Python, Conda, uv, pip, FFmpeg, or the CUDA Toolkit.
+A compatible NVIDIA GPU and driver are required.
 
-The installer remains small: it does not bundle Python, Torch, OmniVoice, or
-model weights. First launch installs the locked runtime and separately downloads
-the pinned model into the user's application-data directory.
+The alpha installer is currently unsigned, so Windows SmartScreen may display
+a warning. Verify the published SHA-256 checksum before running it.
 
-## Run The UI
+## Running from Source
 
-Activate the existing environment and run from the project root:
+The tested source-development target is Windows 10/11 x64 with an NVIDIA GPU.
+
+Install manually:
+
+- [Git](https://git-scm.com/)
+- [uv 0.13.5](https://github.com/astral-sh/uv/releases/tag/0.13.5)
+- A compatible NVIDIA driver
+
+Python, Conda, pip, FFmpeg, and the CUDA Toolkit are not required separately.
+uv installs Python 3.11.15 and creates the environment from `uv.lock`, which is
+the dependency source of truth for this project.
+
+From PowerShell:
 
 ```powershell
-conda activate npc-voice
-python app.py
+git clone https://github.com/gpargianas/npc-voice-studio.git
+cd npc-voice-studio
+
+uv --version
+# Expected: uv 0.13.5
+
+uv python install 3.11.15
+
+uv sync `
+    --frozen `
+    --no-dev `
+    --no-install-project `
+    --managed-python `
+    --python 3.11.15
+
+.\.venv\Scripts\python.exe .\scripts\check_environment.py
+.\.venv\Scripts\python.exe .\scripts\setup_model.py --install
+.\.venv\Scripts\python.exe .\app.py
 ```
 
-The UI binds to `127.0.0.1`, Gradio sharing is disabled, and Gradio analytics
-are disabled. OmniVoice is initialized after the UI opens so startup failures
-can be shown without terminating the interface.
+The model setup command downloads and validates the pinned OmniVoice model
+(approximately 3.3 GB). `app.py` intentionally uses local-only model resolution
+and does not download a missing model by itself.
 
-## Runtime Data
+Open the local URL printed by Gradio, normally:
+
+```text
+http://127.0.0.1:7860
+```
+
+## Application Data
 
 On Windows, mutable data is stored under:
 
 ```text
 %LOCALAPPDATA%\NPC Voice Studio\
-    generated_audio\
+    runtime\
+    models\
     voice_profiles\
+    generated_audio\
     logs\
 ```
 
-Set `NPC_VOICE_STUDIO_DATA_DIR` to override this root for development. On
-non-Windows systems the fallback is `$XDG_DATA_HOME/npc-voice-studio`, or
-`~/.local/share/npc-voice-studio` when `XDG_DATA_HOME` is unset.
+Normal uninstall removes the installed application but preserves this data.
 
-Older development data in the repository's `generated_audio/` and
-`voice_profiles/` folders is not moved or deleted automatically.
+No environment variables are required. Source developers may keep their data
+separate from an installed copy by setting the following before both model
+setup and application launch:
 
-## Model Revision
+```powershell
+$env:NPC_VOICE_STUDIO_DATA_DIR = Join-Path $env:LOCALAPPDATA "NPC Voice Studio Dev"
+```
 
-The application pins `k2-fsa/OmniVoice` to the tested Hugging Face revision:
+## Reference Audio
+
+For voice cloning, use clear speech with an exact matching transcript.
+
+- Best results: approximately 3–10 seconds.
+- Maximum accepted length: 15 seconds.
+- Samples longer than 10 seconds display a quality warning.
+- Samples longer than 15 seconds are rejected.
+
+Only use recordings and voices you have permission to use. Do not use voice
+cloning for impersonation, fraud, scams, or unlawful activity.
+
+## Local Operation and Privacy
+
+- The interface binds to `127.0.0.1` only.
+- Gradio sharing is disabled.
+- Gradio analytics are disabled.
+- Voice recordings, transcripts, generated audio, and saved voices remain on
+  the local computer.
+- Internet access is required for initial runtime/model setup or a repair when
+  required cache files are unavailable.
+
+Application diagnostics are written to:
+
+```text
+%LOCALAPPDATA%\NPC Voice Studio\logs\
+```
+
+Logs do not intentionally contain dialogue text, transcripts, recordings, or
+generated audio contents.
+
+## OmniVoice Model
+
+NPC Voice Studio pins `k2-fsa/OmniVoice` to the tested revision:
 
 ```text
 c5fdb5ccb189668d56333f77ba2629f4cd7535f4
 ```
 
-The model is downloaded by Hugging Face when that revision is not already in
-the local cache. Model-load failures are recorded in the application log.
-
-## Run The Smoke Test
-
-Provide a local reference audio file and its exact transcript:
-
-```powershell
-python scripts/test_generation.py reference.wav `
-    --reference-text "Exact words spoken in the reference audio."
-```
-
-By default the result is written to the centralized `generated_audio` directory.
-Keep cloning references clear, accurately transcribed, and no longer than 15
-seconds; approximately 3-10 seconds is recommended.
+NPC Voice Studio's Apache-2.0 application license does not grant rights to the
+pretrained model. The upstream model card identifies the pretrained weights as
+CC-BY-NC and restricts them to non-commercial use. Review
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the pinned upstream model
+[card](https://huggingface.co/k2-fsa/OmniVoice/blob/c5fdb5ccb189668d56333f77ba2629f4cd7535f4/README.md)
+before use.
 
 ## License
 
-NPC Voice Studio's original source code is licensed under Apache License 2.0.
-Third-party software and the OmniVoice pretrained model remain under their own
-terms; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). In particular,
-the OmniVoice pretrained weights are not licensed by NPC Voice Studio and the
-upstream model card restricts them to non-commercial use.
+NPC Voice Studio's original source code is licensed under the
+[Apache License 2.0](LICENSE). Third-party software and pretrained model files
+remain under their respective licenses and terms; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
