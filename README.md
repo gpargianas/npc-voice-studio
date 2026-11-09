@@ -3,11 +3,9 @@
 NPC Voice Studio is a local Windows application for creating character voices
 with [OmniVoice](https://github.com/k2-fsa/OmniVoice). It supports voice
 cloning from a short sample, voice design, random voice creation, reusable
-saved voices, and batch dialogue generation.
+saved voices, and batch dialogue generation. It supports Windows 11 
+and NVIDIA GPUs.
 
-> **Alpha release:** NPC Voice Studio v0.1.0-alpha currently supports Windows
-> 10/11 x64 with an NVIDIA GPU. CPU, AMD, Linux, and macOS are not supported by
-> this release.
 
 ## Features
 
@@ -22,17 +20,17 @@ saved voices, and batch dialogue generation.
 
 ## Using the Windows Installer
 
-For normal use, download the v0.1.0-alpha Windows installer from
+For normal use, download the v0.1.0 Windows installer from
 [GitHub Releases](https://github.com/gpargianas/npc-voice-studio/releases):
 
 ```text
-NPC-Voice-Studio-0.1.0-alpha-win-x64.exe
+NPC-Voice-Studio-0.1.0-win-x64.exe
 ```
 
 The installer does not require administrator privileges. On first launch,
 NPC Voice Studio installs its managed Python and CUDA-enabled AI runtime, then
 downloads and validates the pinned OmniVoice model. This requires an internet
-connection, several minutes, and approximately 16 GiB of free disk space.
+connection, several minutes, and approximately 18 GiB of free disk space.
 
 After setup completes, normal launches and voice generation work offline. The
 application includes a **Repair Runtime** option that preserves models, saved
@@ -40,9 +38,6 @@ voices, generated audio, and logs.
 
 You do not need to install Python, Conda, uv, pip, FFmpeg, or the CUDA Toolkit.
 A compatible NVIDIA GPU and driver are required.
-
-The alpha installer is currently unsigned, so Windows SmartScreen may display
-a warning. Verify the published SHA-256 checksum before running it.
 
 ## Running from Source
 
