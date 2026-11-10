@@ -171,10 +171,7 @@ foreach ($File in @(
     "scripts\bootstrap_runtime.py",
     "scripts\check_environment.py",
     "scripts\setup_model.py",
-    "docs\phase-c1-uv-runtime.md",
-    "docs\phase-c2-user-bootstrap.md",
-    "docs\phase-c3-clean-machine-test.md",
-    "docs\phase-c3-windows-release.md",
+    "BUILDING.md",
     "tools\uv\README.md"
 )) {
     Copy-ReleaseFile $File

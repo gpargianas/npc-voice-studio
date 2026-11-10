@@ -82,6 +82,8 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn('"scripts\\managed_python_bootstrap.ps1"', source)
         self.assertIn('"assets\\app_icon.png"', source)
         self.assertIn('"assets\\app_icon.ico"', source)
+        self.assertIn('"BUILDING.md"', source)
+        self.assertNotIn('"docs\\phase-c', source)
         self.assertIn('/win32icon:', source)
 
     def test_windows_branding_references_packaged_icon(self) -> None:

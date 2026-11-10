@@ -20,11 +20,11 @@ and NVIDIA GPUs.
 
 ## Using the Windows Installer
 
-For normal use, download the v1.0 Windows installer from
+For normal use, download the v0.1.0-alpha Windows installer from
 [GitHub Releases](https://github.com/gpargianas/npc-voice-studio/releases):
 
 ```text
-NPC-Voice-Studio-1.0-win-x64.exe
+NPC-Voice-Studio-0.1.0-alpha-win-x64.exe
 ```
 
 The installer does not require administrator privileges. On first launch,

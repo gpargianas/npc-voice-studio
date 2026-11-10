@@ -18,6 +18,10 @@ models/
 *.safetensors
 
 .env
+.env.*
+*.pem
+*.key
+*.pfx
 .venv/
 venv/
 
