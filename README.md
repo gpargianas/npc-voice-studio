@@ -1,9 +1,9 @@
 # NPC Voice Studio
 
-NPC Voice Studio is a local Windows application for creating character voices
-with [OmniVoice](https://github.com/k2-fsa/OmniVoice). It supports voice
+NPC Voice Studio is a local AI voice-generation tool for game modders using
+[OmniVoice](https://github.com/k2-fsa/OmniVoice). It supports voice
 cloning from a short sample, voice design, random voice creation, reusable
-saved voices, and batch dialogue generation. It supports Windows 11 
+voice profiles, and batch dialogue generation. It supports Windows 11 
 and NVIDIA GPUs.
 
 
